@@ -21,7 +21,7 @@ RUN chmod +x /app/autodetect-pdf-fields
 COPY server/package.json server/bun.lock ./server/
 WORKDIR /app/server
 RUN bun install --frozen-lockfile
-COPY server/index.ts server/router.ts server/detect.ts ./
+COPY server/index.ts server/router.ts server/detect.ts server/auth.ts ./
 
 # Set environment for the server
 ENV BINARY_PATH=/app/autodetect-pdf-fields
