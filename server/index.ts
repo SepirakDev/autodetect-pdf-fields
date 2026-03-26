@@ -86,11 +86,11 @@ async function handleDetect(req: Request): Promise<Response> {
       args.push("--debug", debugPath);
     }
 
-    // Run the binary from the project root so it finds libpdfium
-    const projectRoot = dirname(import.meta.dir);
+    // Run the binary from its directory so it finds libpdfium
+    const binaryDir = dirname(BINARY_PATH);
     const proc = spawn({
       cmd: [BINARY_PATH, ...args],
-      cwd: projectRoot,
+      cwd: binaryDir,
       stdout: "pipe",
       stderr: "pipe",
       env: {
