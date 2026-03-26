@@ -1,119 +1,132 @@
 # autodetect-pdf-fields
 
-Detect fillable fields (text inputs, checkboxes, signatures, dates, numbers) in PDF documents using an ONNX object detection model.
-
-A Rust reimplementation of [DocuSeal's](https://github.com/docusealco/docuseal) autodetect feature, combining ML inference with PDF structural analysis for accurate field detection.
+Detect and label fillable fields in PDF documents. Uses an ONNX object detection model to find fields, then optionally sends them to Claude's vision API for semantic labeling.
 
 ## How It Works
 
-1. **ML Inference**: Renders each PDF page to an image and runs it through an ONNX object detection model (RT-DETR based) that detects text fields and checkboxes
-2. **Structural Analysis**: Extracts underscores (`___`) and horizontal lines from the PDF to confirm ML detections
-3. **Confidence Boosting**: ML detections that overlap with structural indicators get a confidence boost
-4. **Type Classification**: Uses regex patterns on text preceding each field to classify types (date, signature, number)
+1. **ML Detection** -- Renders each PDF page to an image and runs it through an ONNX object detection model (RT-DETR) that locates text fields and checkboxes
+2. **Structural Analysis** -- Extracts underscores (`___`) and horizontal lines from the PDF to confirm ML detections and boost confidence
+3. **Type Classification** -- Uses regex patterns on surrounding text to classify fields as date, signature, number, or text
+4. **Labeling** (with `--label`) -- Sends each page to Claude's vision API with the detected bounding boxes. Claude reads the document and returns semantic labels like "Account Number", "Date of Birth", "Member 1 Signature"
 
-## Setup
+## Quick Start
 
-### 1. Install pdfium
-
-The tool requires the pdfium shared library:
-
-**macOS (Homebrew):**
-```bash
-brew install pdfium
-```
-
-**Or download from:**
-https://github.com/nicbarker/pdfium-binaries/releases
-
-### 2. Download the ONNX model
+Download a release from [Releases](https://github.com/SepirakDev/autodetect-pdf-fields/releases), extract, and run:
 
 ```bash
-./scripts/download_model.sh
+# Detect fields
+./autodetect-pdf-fields document.pdf --pretty
+
+# Detect and label fields with Claude
+ANTHROPIC_API_KEY=sk-ant-... ./autodetect-pdf-fields document.pdf --pretty --label
+
+# Generate a debug PDF with bounding box visualization
+./autodetect-pdf-fields document.pdf --debug debug.pdf
 ```
 
-Or manually download `model_704_int8.onnx` from:
-https://github.com/docusealco/fields-detection/releases/download/2.0.0/model_704_int8.onnx
+Release archives are self-contained -- they include the binary, pdfium library, and ONNX model.
 
-Place it at `models/model_704_int8.onnx`.
+## Output
 
-### 3. Build
-
-```bash
-cargo build --release
-```
-
-## Usage
-
-```bash
-# Basic usage
-autodetect-pdf-fields document.pdf
-
-# Pretty-print output
-autodetect-pdf-fields document.pdf --pretty
-
-# Custom model path and confidence threshold
-autodetect-pdf-fields document.pdf -m /path/to/model.onnx -c 0.5
-
-# Process a single page
-autodetect-pdf-fields document.pdf --page 0
-
-# Save output to file
-autodetect-pdf-fields document.pdf -o fields.json --pretty
-```
-
-## Output Format
+### Without `--label`
 
 ```json
 [
   {
-    "type": "text",
+    "type": "date",
+    "name": "ACCOUNT OPEN DATE",
     "page": 0,
-    "confidence": 0.87,
-    "x": 0.123,
-    "y": 0.456,
-    "w": 0.234,
-    "h": 0.034
-  },
-  {
-    "type": "signature",
-    "page": 1,
-    "confidence": 0.92,
+    "confidence": 0.83,
     "x": 0.08,
-    "y": 0.61,
-    "w": 0.35,
-    "h": 0.05
+    "y": 0.27,
+    "w": 0.14,
+    "h": 0.06
   }
 ]
 ```
 
-Coordinates are normalized to [0, 1] relative to the page dimensions.
+The `name` field contains a heuristic label extracted from the preceding text in the PDF. It's often noisy for complex layouts like tables.
+
+### With `--label`
+
+```json
+[
+  {
+    "type": "date",
+    "name": "Account Open Date",
+    "page": 0,
+    "confidence": 0.83,
+    "x": 0.08,
+    "y": 0.27,
+    "w": 0.14,
+    "h": 0.06
+  },
+  {
+    "type": "text",
+    "name": "Member 1 Signature",
+    "page": 5,
+    "confidence": 0.51,
+    "x": 0.63,
+    "y": 0.22,
+    "w": 0.27,
+    "h": 0.02
+  }
+]
+```
+
+Claude refines the heuristic labels into clean, human-readable names. One API call per page.
+
+Coordinates (`x`, `y`, `w`, `h`) are normalized to [0, 1] relative to the page dimensions.
 
 ## Field Types
 
 | Type | Description |
 |------|-------------|
-| `text` | General text input field |
-| `checkbox` | Checkbox (detected by ML model) |
-| `date` | Date field (classified by preceding text like "Date:", "Datum:") |
-| `signature` | Signature field (classified by preceding text like "Signature:", "Sign here:") |
-| `number` | Number field (classified by preceding text like "Price:", "$", "Total:") |
+| `text` | General text input |
+| `checkbox` | Checkbox |
+| `date` | Date field (e.g., preceded by "Date:", "Datum:") |
+| `signature` | Signature field (e.g., preceded by "Signature:", "Sign here:") |
+| `number` | Number/currency field (e.g., preceded by "Price:", "$", "Total:") |
 
-## CLI Options
+## CLI Reference
 
 ```
+autodetect-pdf-fields [OPTIONS] <INPUT>
+
 Arguments:
-  <INPUT>              Path to PDF or image file
+  <INPUT>                  Path to PDF file
 
 Options:
-  -m, --model <PATH>   Path to ONNX model [default: models/model_704_int8.onnx]
-  -c, --confidence <F> Confidence threshold [default: 0.3]
-  --nms <F>            NMS IoU threshold [default: 0.1]
-  --nmm <F>            NMM overlap threshold [default: 0.5]
-  --no-classify        Disable regex-based type classification
-  --page <N>           Process only this page (0-indexed)
-  --pretty             Pretty-print JSON output
-  -o, --output <PATH>  Write output to file instead of stdout
+  -m, --model <PATH>       Path to ONNX model [default: models/model_704_int8.onnx]
+  -c, --confidence <F>     Confidence threshold [default: 0.3]
+  --nms <F>                NMS IoU threshold [default: 0.1]
+  --nmm <F>                NMM overlap threshold [default: 0.5]
+  --no-classify            Disable regex-based type classification
+  --page <N>               Process only this page (0-indexed)
+  --pretty                 Pretty-print JSON output
+  -o, --output <PATH>      Write JSON output to file instead of stdout
+  --debug <PATH>           Write a debug PDF with bounding boxes
+  --label                  Label fields using Claude's vision API
+  --label-model <MODEL>    Claude model for labeling [default: claude-sonnet-4-20250514]
 ```
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Only with `--label` | Anthropic API key for Claude vision labeling |
+
+## Building from Source
+
+```bash
+# Install dependencies
+./scripts/download_model.sh
+
+# Build
+cargo build --release
+```
+
+Requires pdfium at runtime. The binary searches for `libpdfium` in the current directory first, then the system library path. Download from [bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries/releases).
 
 ## Library Usage
 
@@ -121,19 +134,25 @@ Options:
 use autodetect_pdf_fields::{detect_fields_in_pdf, DetectOptions};
 use autodetect_pdf_fields::model::inference::FieldDetector;
 use autodetect_pdf_fields::pdf::document::PdfDoc;
+use autodetect_pdf_fields::labeler::label_fields;
 
-let detector = FieldDetector::load("models/model_704_int8.onnx".as_ref())?;
+let mut detector = FieldDetector::load("models/model_704_int8.onnx".as_ref())?;
 let pdf = PdfDoc::open("document.pdf".as_ref())?;
 
 let options = DetectOptions::default();
-let fields = detect_fields_in_pdf(&pdf, &detector, &options)?;
+let mut fields = detect_fields_in_pdf(&pdf, &mut detector, &options)?;
+
+// Optional: label with Claude
+label_fields(&pdf, &mut fields, None)?;
 
 for field in &fields {
-    println!("{:?} at page {} ({:.0}% confidence)",
-        field.field_type, field.page, field.confidence * 100.0);
+    println!("{}: {:?} ({:.0}%)",
+        field.name.as_deref().unwrap_or("unlabeled"),
+        field.field_type,
+        field.confidence * 100.0);
 }
 ```
 
 ## Model
 
-The ONNX model is from [docusealco/fields-detection](https://github.com/docusealco/fields-detection). It is a V2 object detection model (RT-DETR architecture) trained to detect text fields and checkboxes in document images. The INT8 quantized version (`model_704_int8.onnx`) is used for fast CPU inference at 704x704 resolution.
+The ONNX model is from [docusealco/fields-detection](https://github.com/docusealco/fields-detection). RT-DETR architecture, INT8 quantized, 704x704 input resolution. Detects two classes: text fields and checkboxes.
