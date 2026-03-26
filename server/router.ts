@@ -3,6 +3,14 @@ import { oz } from "@orpc/zod";
 import { z } from "zod";
 import { runDetection } from "./detect";
 
+const AvailableFieldSchema = z.object({
+  type: z
+    .enum(["text", "checkbox", "date", "signature", "number"])
+    .describe("Field type"),
+  name: z.string().describe("Descriptive label for the field"),
+  id: z.string().describe("Unique identifier for the field"),
+});
+
 const DetectedFieldSchema = z.object({
   type: z.enum(["text", "checkbox", "date", "signature", "number"]),
   name: z.string().optional().describe("Semantic label for the field"),
@@ -34,9 +42,9 @@ const detect = os
         .default(false)
         .describe("Include debug PDF with bounding boxes (base64)"),
       availableFields: z
-        .string()
+        .array(AvailableFieldSchema)
         .optional()
-        .describe('JSON string: {"availableFields": [{type, name, id}, ...]}'),
+        .describe("Available fields to match detected fields against"),
     })
   )
   .output(

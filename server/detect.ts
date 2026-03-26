@@ -11,12 +11,18 @@ const MODEL_PATH =
   process.env.MODEL_PATH || join(PROJECT_ROOT, "models", "model_704_int8.onnx");
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+export interface AvailableField {
+  type: string;
+  name: string;
+  id: string;
+}
+
 export interface DetectInput {
   file: File;
   label?: boolean;
   confidence?: number;
   debug?: boolean;
-  availableFields?: string;
+  availableFields?: AvailableField[];
 }
 
 export interface DetectedField {
@@ -60,9 +66,9 @@ export async function runDetection(input: DetectInput): Promise<DetectResult> {
       args.push("--label");
     }
 
-    if (availableFields) {
+    if (availableFields && availableFields.length > 0) {
       const fieldsPath = join(tmpDir, "fields.json");
-      await Bun.write(fieldsPath, availableFields);
+      await Bun.write(fieldsPath, JSON.stringify({ availableFields }));
       args.push("--fields-file", fieldsPath);
     }
 
