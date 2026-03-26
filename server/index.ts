@@ -22,9 +22,23 @@ const generator = new OpenAPIGenerator({
 
 let specCache: object | null = null;
 
+function fixFileSchemas(obj: any): void {
+  if (obj && typeof obj === "object") {
+    // Fix file fields: contentMediaType means it's a file upload
+    if (obj.type === "string" && obj.contentMediaType) {
+      obj.type = "string";
+      obj.format = "binary";
+      delete obj.contentMediaType;
+    }
+    for (const value of Object.values(obj)) {
+      fixFileSchemas(value);
+    }
+  }
+}
+
 async function getSpec() {
   if (!specCache) {
-    specCache = await generator.generate(router, {
+    const spec: any = await generator.generate(router, {
       info: {
         title: "autodetect-pdf-fields",
         version: "0.1.0",
@@ -33,6 +47,9 @@ async function getSpec() {
       },
       servers: [{ url: "/api" }],
     });
+    // Fix file schemas to use format: binary instead of contentMediaType
+    fixFileSchemas(spec);
+    specCache = spec;
   }
   return specCache;
 }
