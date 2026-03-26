@@ -1,0 +1,10 @@
+{
+  "name": "autodetect-pdf-fields-server",
+  "version": "0.1.0",
+  "description": "HTTP API server for autodetect-pdf-fields",
+  "scripts": {
+    "start": "bun run index.ts",
+    "dev": "bun --watch run index.ts"
+  },
+  "dependencies": {}
+}
