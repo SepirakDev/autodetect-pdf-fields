@@ -5,7 +5,7 @@ WORKDIR /app
 # Download the pre-built linux-x64 release artifact
 RUN apt-get update && apt-get install -y curl tar && rm -rf /var/lib/apt/lists/*
 
-ARG RELEASE_VERSION=v0.1.4
+ARG RELEASE_VERSION=v0.2.0
 RUN curl -L -o /tmp/release.tar.gz \
     "https://github.com/SepirakDev/autodetect-pdf-fields/releases/download/${RELEASE_VERSION}/autodetect-pdf-fields-linux-x64.tar.gz" \
     && tar -xzf /tmp/release.tar.gz -C /tmp \
