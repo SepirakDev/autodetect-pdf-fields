@@ -32,7 +32,7 @@ jobs:
             archive_ext: tar.gz
 
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-latest
             pdfium_asset: pdfium-mac-x64.tgz
             pdfium_lib: lib/libpdfium.dylib
             artifact_name: autodetect-pdf-fields-macos-x64
