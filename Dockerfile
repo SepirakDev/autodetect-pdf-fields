@@ -17,16 +17,17 @@ RUN curl -L -o /tmp/release.tar.gz \
 
 RUN chmod +x /app/autodetect-pdf-fields
 
-# Copy server files
-COPY server/package.json server/index.ts ./server/
+# Copy server files and install deps
+COPY server/package.json server/bun.lock ./server/
+WORKDIR /app/server
+RUN bun install --frozen-lockfile
+COPY server/index.ts server/router.ts server/detect.ts ./
 
 # Set environment for the server
 ENV BINARY_PATH=/app/autodetect-pdf-fields
 ENV MODEL_PATH=/app/models/model_704_int8.onnx
 ENV LD_LIBRARY_PATH=/app
 ENV PORT=3000
-
-WORKDIR /app/server
 
 EXPOSE 3000
 
