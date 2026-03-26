@@ -28,23 +28,29 @@ const detect = os
   .input(
     z.object({
       file: oz.file().type("application/pdf").describe("PDF document to analyze"),
-      label: z.boolean().optional().default(false).describe("Enable Claude vision labeling"),
+      label: z
+        .union([z.boolean(), z.string().transform((s) => s === "true")])
+        .optional()
+        .default(false)
+        .describe("Enable Claude vision labeling"),
       confidence: z
-        .number()
-        .min(0)
-        .max(1)
+        .union([z.number(), z.string().transform((s) => parseFloat(s))])
+        .pipe(z.number().min(0).max(1))
         .optional()
         .default(0.3)
         .describe("Confidence threshold"),
       debug: z
-        .boolean()
+        .union([z.boolean(), z.string().transform((s) => s === "true")])
         .optional()
         .default(false)
         .describe("Include debug PDF with bounding boxes (base64)"),
       availableFields: z
-        .array(AvailableFieldSchema)
+        .union([
+          z.array(AvailableFieldSchema),
+          z.string().transform((s) => JSON.parse(s) as z.infer<typeof AvailableFieldSchema>[]),
+        ])
         .optional()
-        .describe("Available fields to match detected fields against"),
+        .describe("Available fields to match detected fields against (JSON array or string)"),
     })
   )
   .output(
