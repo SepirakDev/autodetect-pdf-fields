@@ -13,7 +13,51 @@ env:
   PDFIUM_VERSION: "chromium/7749"
 
 jobs:
+  check-rust-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rust_changed: ${{ steps.check.outputs.rust_changed }}
+      previous_tag: ${{ steps.check.outputs.previous_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Rust source changes since last release
+        id: check
+        run: |
+          # Find the previous tag
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep '^v' | sed -n '2p')
+          echo "previous_tag=${PREVIOUS_TAG}" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found, building"
+            echo "rust_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Comparing $PREVIOUS_TAG to HEAD"
+
+          # Check if any Rust-related files changed
+          CHANGED=$(git diff --name-only "$PREVIOUS_TAG"..HEAD -- \
+            'src/**' \
+            'Cargo.toml' \
+            'Cargo.lock' \
+            'scripts/**' \
+            '.github/workflows/release.yml')
+
+          if [ -n "$CHANGED" ]; then
+            echo "Rust source changed:"
+            echo "$CHANGED"
+            echo "rust_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Rust source changes, will reuse previous release artifacts"
+            echo "rust_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: check-rust-changes
+    if: needs.check-rust-changes.outputs.rust_changed == 'true'
     strategy:
       matrix:
         include:
@@ -94,8 +138,35 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: /tmp/${{ matrix.artifact_name }}.${{ matrix.archive_ext }}
 
+  # Copy artifacts from the previous release when Rust hasn't changed
+  reuse:
+    needs: check-rust-changes
+    if: needs.check-rust-changes.outputs.rust_changed == 'false'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        artifact:
+          - autodetect-pdf-fields-linux-x64.tar.gz
+          - autodetect-pdf-fields-macos-arm64.tar.gz
+    steps:
+      - name: Download from previous release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ needs.check-rust-changes.outputs.previous_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "${{ matrix.artifact }}" \
+            --dir /tmp/artifacts
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: /tmp/artifacts/${{ matrix.artifact }}
+
   release:
-    needs: build
+    needs: [check-rust-changes, build, reuse]
+    if: always() && !failure() && !cancelled()
     runs-on: ubuntu-latest
 
     steps:
