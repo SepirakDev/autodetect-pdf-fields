@@ -6,5 +6,10 @@
     "start": "bun run index.ts",
     "dev": "bun --watch run index.ts"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@orpc/openapi": "^1.13.13",
+    "@orpc/server": "^1.13.13",
+    "@orpc/zod": "^1.13.13",
+    "zod": "3"
+  }
 }
