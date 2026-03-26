@@ -78,7 +78,8 @@ jobs:
           cp "/tmp/pdfium/${{ matrix.pdfium_lib }}" "$STAGING/"
 
           # Model
-          cp /tmp/model_704_int8.onnx "$STAGING/"
+          mkdir -p "$STAGING/models"
+          cp /tmp/model_704_int8.onnx "$STAGING/models/"
 
           # Docs
           cp README.md "$STAGING/"
