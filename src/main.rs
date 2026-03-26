@@ -7,6 +7,7 @@ use autodetect_pdf_fields::debug::write_debug_pdf;
 use autodetect_pdf_fields::detection::orchestrator::{detect_fields_in_pdf, DetectOptions};
 use autodetect_pdf_fields::labeler::label_fields;
 use autodetect_pdf_fields::model::inference::FieldDetector;
+use autodetect_pdf_fields::output::AvailableFieldsFile;
 use autodetect_pdf_fields::pdf::document::PdfDoc;
 
 fn main() -> Result<()> {
@@ -31,9 +32,23 @@ fn main() -> Result<()> {
 
     let mut fields = detect_fields_in_pdf(&pdf, &mut detector, &options)?;
 
+    // Load available fields if provided
+    let available_fields = if let Some(path) = &args.fields_file {
+        let data = fs::read_to_string(path)?;
+        let parsed: AvailableFieldsFile = serde_json::from_str(&data)?;
+        Some(parsed.available_fields)
+    } else {
+        None
+    };
+
     // Label fields via Claude if requested
     if args.label {
-        label_fields(&pdf, &mut fields, Some(&args.label_model))?;
+        label_fields(
+            &pdf,
+            &mut fields,
+            Some(&args.label_model),
+            available_fields.as_deref(),
+        )?;
     }
 
     // Write debug PDF if requested

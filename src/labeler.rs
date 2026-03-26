@@ -7,7 +7,7 @@ use image::{DynamicImage, Rgba};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::output::DetectedField;
+use crate::output::{AvailableField, DetectedField};
 use crate::pdf::document::PdfDoc;
 use crate::pdf::renderer::render_page;
 
@@ -59,6 +59,7 @@ struct ResponseContent {
 struct FieldLabel {
     field_number: usize,
     name: String,
+    field_id: Option<String>,
 }
 
 /// Draw a numbered bounding box on an image.
@@ -138,8 +139,8 @@ fn render_annotated_page(
     Ok(b64)
 }
 
-/// Build the prompt for Claude with field information.
-fn build_prompt(fields: &[&DetectedField]) -> String {
+/// Build the prompt for Claude with field information and optional available fields.
+fn build_prompt(fields: &[&DetectedField], available_fields: Option<&[AvailableField]>) -> String {
     let mut field_list = String::from("Here are the detected fields with their numbers, types, and heuristic labels:\n\n");
 
     for (i, field) in fields.iter().enumerate() {
@@ -154,8 +155,28 @@ fn build_prompt(fields: &[&DetectedField]) -> String {
         ));
     }
 
-    format!(
-        r#"You are analyzing a document page with detected form fields marked by red bounding boxes.
+    if let Some(available) = available_fields {
+        let mut available_list = String::from("\nYou MUST match each detected field to the best-matching available field from the list below and return its id as \"field_id\". Each available field can be used at most once. If no available field is a reasonable match, set field_id to null.\n\nAvailable fields:\n");
+
+        for af in available {
+            available_list.push_str(&format!(
+                "- id=\"{}\", type={}, name=\"{}\"\n",
+                af.id, af.field_type, af.name
+            ));
+        }
+
+        format!(
+            r#"You are analyzing a document page with detected form fields marked by red bounding boxes.
+
+{field_list}{available_list}
+For each numbered field, determine the correct semantic label and match it to the best available field.
+
+Respond with ONLY a JSON array, no other text:
+[{{"field_number": 1, "name": "...", "field_id": "..."}}, {{"field_number": 2, "name": "...", "field_id": null}}, ...]"#
+        )
+    } else {
+        format!(
+            r#"You are analyzing a document page with detected form fields marked by red bounding boxes.
 
 {field_list}
 For each numbered field, determine the correct semantic label — what data should be entered in that field (e.g., "Full Name", "Date of Birth", "Account Number", "Signature", "City", "State", "ZIP Code").
@@ -164,7 +185,8 @@ Use the heuristic labels as hints but correct them based on what you see in the 
 
 Respond with ONLY a JSON array, no other text:
 [{{"field_number": 1, "name": "..."}}, {{"field_number": 2, "name": "..."}}, ...]"#
-    )
+        )
+    }
 }
 
 /// Call Claude's vision API to label fields on a single page.
@@ -173,8 +195,9 @@ fn call_claude_api(
     model: &str,
     image_b64: &str,
     fields: &[&DetectedField],
+    available_fields: Option<&[AvailableField]>,
 ) -> Result<Vec<FieldLabel>> {
-    let prompt = build_prompt(fields);
+    let prompt = build_prompt(fields, available_fields);
 
     let request = ApiRequest {
         model: model.to_string(),
@@ -231,11 +254,12 @@ fn call_claude_api(
 /// Label detected fields using Claude's vision API.
 ///
 /// Groups fields by page, renders each page with numbered bounding boxes,
-/// sends to Claude for labeling, and updates the field names.
+/// sends to Claude for labeling, and updates the field names and optional field IDs.
 pub fn label_fields(
     pdf: &PdfDoc,
     fields: &mut [DetectedField],
     model: Option<&str>,
+    available_fields: Option<&[AvailableField]>,
 ) -> Result<()> {
     let api_key = env::var("ANTHROPIC_API_KEY")
         .map_err(|_| Error::Inference("ANTHROPIC_API_KEY environment variable not set".into()))?;
@@ -261,19 +285,21 @@ pub fn label_fields(
         let image_b64 = render_annotated_page(pdf, *page_idx, &page_fields)?;
 
         // Call Claude API
-        match call_claude_api(&api_key, model, &image_b64, &page_fields) {
+        match call_claude_api(&api_key, model, &image_b64, &page_fields, available_fields) {
             Ok(labels) => {
                 for label in labels {
                     // field_number is 1-indexed, map back to the original index
                     if label.field_number >= 1 && label.field_number <= field_indices.len() {
                         let original_idx = field_indices[label.field_number - 1];
                         fields[original_idx].name = Some(label.name);
+                        if label.field_id.is_some() {
+                            fields[original_idx].field_id = label.field_id;
+                        }
                     }
                 }
             }
             Err(e) => {
                 eprintln!("Warning: labeling failed for page {page_idx}: {e}");
-                // Graceful degradation — fields keep heuristic labels
             }
         }
     }

@@ -181,6 +181,7 @@ fn build_fields(
             DetectedField {
                 field_type,
                 name,
+                field_id: None,
                 page,
                 confidence: det.confidence,
                 bbox: det.bbox,

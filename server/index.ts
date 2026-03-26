@@ -19,6 +19,7 @@ async function handleDetect(req: Request): Promise<Response> {
   let confidence = 0.3;
   let pretty = false;
   let debug = false;
+  let availableFieldsJson: string | null = null;
 
   // Parse query params
   const url = new URL(req.url);
@@ -36,6 +37,12 @@ async function handleDetect(req: Request): Promise<Response> {
       return Response.json({ error: "No 'file' field in form data" }, { status: 400 });
     }
     pdfBuffer = await file.arrayBuffer();
+
+    // Check for available fields
+    const fieldsField = formData.get("availableFields");
+    if (fieldsField) {
+      availableFieldsJson = typeof fieldsField === "string" ? fieldsField : await (fieldsField as File).text();
+    }
   } else if (
     contentType.includes("application/pdf") ||
     contentType.includes("application/octet-stream")
@@ -80,6 +87,13 @@ async function handleDetect(req: Request): Promise<Response> {
         );
       }
       args.push("--label");
+    }
+
+    // Write available fields to temp file if provided
+    if (availableFieldsJson) {
+      const fieldsPath = join(tmpDir, "fields.json");
+      await Bun.write(fieldsPath, availableFieldsJson);
+      args.push("--fields-file", fieldsPath);
     }
 
     if (debugPath) {

@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::geometry::BBox;
 
@@ -28,8 +28,24 @@ pub struct DetectedField {
     pub field_type: FieldType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_id: Option<String>,
     pub page: usize,
     pub confidence: f32,
     #[serde(flatten)]
     pub bbox: BBox,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AvailableField {
+    #[serde(rename = "type")]
+    pub field_type: String,
+    pub name: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AvailableFieldsFile {
+    #[serde(rename = "availableFields")]
+    pub available_fields: Vec<AvailableField>,
 }

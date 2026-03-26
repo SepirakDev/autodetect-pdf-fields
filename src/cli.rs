@@ -51,4 +51,8 @@ pub struct Args {
     /// Model to use for labeling
     #[arg(long, default_value = "claude-sonnet-4-20250514")]
     pub label_model: String,
+
+    /// Path to JSON file with available fields for mapping
+    #[arg(long)]
+    pub fields_file: Option<PathBuf>,
 }
