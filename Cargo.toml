@@ -1,0 +1,31 @@
+[package]
+name = "autodetect-pdf-fields"
+version = "0.1.0"
+edition = "2021"
+description = "Detect fillable fields in PDF documents using ONNX object detection"
+
+[[bin]]
+name = "autodetect-pdf-fields"
+path = "src/main.rs"
+
+[lib]
+name = "autodetect_pdf_fields"
+path = "src/lib.rs"
+
+[dependencies]
+ort = { version = "2.0.0-rc.12", features = ["ndarray"] }
+ndarray = "0.17"
+image = "0.25"
+pdfium-render = "0.8"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+num_cpus = "1"
+printpdf = "0.7"
+ureq = { version = "3", features = ["json"] }
+base64 = "0.22"
