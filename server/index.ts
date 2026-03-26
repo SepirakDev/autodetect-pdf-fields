@@ -4,6 +4,7 @@ import { ZodToJsonSchemaConverter } from "@orpc/zod";
 import { CORSPlugin } from "@orpc/server/plugins";
 import { onError } from "@orpc/server";
 import { router } from "./router";
+import { isAuthEnabled, isValidKey, extractBearerToken } from "./auth";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
@@ -49,6 +50,20 @@ async function getSpec() {
     });
     // Fix file schemas to use format: binary instead of contentMediaType
     fixFileSchemas(spec);
+
+    // Add security scheme when auth is enabled
+    if (isAuthEnabled()) {
+      spec.components = spec.components || {};
+      spec.components.securitySchemes = {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          description: "API key passed as Bearer token",
+        },
+      };
+      spec.security = [{ bearerAuth: [] }];
+    }
+
     specCache = spec;
   }
   return specCache;
@@ -90,6 +105,19 @@ const server = Bun.serve({
     // Root redirect to docs
     if (url.pathname === "/" && request.method === "GET") {
       return Response.redirect("/docs", 302);
+    }
+
+    // Auth check for API routes (except health)
+    if (url.pathname.startsWith("/api/") && url.pathname !== "/api/health") {
+      if (isAuthEnabled()) {
+        const token = extractBearerToken(request);
+        if (!token || !isValidKey(token)) {
+          return Response.json(
+            { error: "Unauthorized", message: "Invalid or missing API key" },
+            { status: 401, headers: { "WWW-Authenticate": "Bearer" } }
+          );
+        }
+      }
     }
 
     // Handle API routes via oRPC
